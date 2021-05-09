@@ -4,6 +4,8 @@ use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tracing::debug;
 use tracing::{error, Instrument};
+use bytes::{Bytes, Buf};
+use std::str;
 
 async fn direct_to_control(mut incoming: TcpStream) {
     let mut control_socket =
@@ -37,7 +39,8 @@ pub async fn accept_connection(socket: TcpStream) {
         mut socket,
         host,
         forwarded_for,
-    } = match peek_http_request_host(socket).await {
+    // } = match peek_http_request_host(socket).await {
+    } = match peek_tcp_request_host(socket).await {
         Some(s) => s,
         None => return,
     };
@@ -163,6 +166,60 @@ struct StreamWithPeekedHost {
     socket: TcpStream,
     host: String,
     forwarded_for: String,
+}
+
+#[derive(Debug)]
+struct Payload {
+    subdomain: String,
+    payload: Bytes,
+}
+fn parse_payload(buf: &[u8]) -> Payload {
+    let mut bytes = Bytes::copy_from_slice(buf);
+    let len = bytes.get_u32() as usize;
+    let subdomain = bytes.copy_to_bytes(len);
+    let subdomain = str::from_utf8(&subdomain).expect("failed to parse string").to_string();
+    let len = bytes.get_u32() as usize;
+    let payload = bytes.copy_to_bytes(len);
+
+    Payload {
+        subdomain,
+        payload
+    }
+}
+
+#[tracing::instrument(skip(socket))]
+async fn peek_tcp_request_host(mut socket: TcpStream) -> Option<StreamWithPeekedHost> {
+    /// Note we return out if the host header is not found
+    /// within the first 4kb of the request.
+    const MAX_HEADER_PEAK: usize = 4096;
+    let mut buf = vec![0; MAX_HEADER_PEAK]; //1kb
+
+    tracing::debug!("checking stream headers");
+
+    let n = match socket.peek(&mut buf).await {
+        Ok(n) => n,
+        Err(e) => {
+            error!("failed to read from tcp socket to determine host: {:?}", e);
+            return None;
+        }
+    };
+
+    // make sure we're not peeking the same header bytes
+    if n == 0 {
+        tracing::debug!("unable to peek header bytes");
+        return None;
+    }
+
+    tracing::debug!("peeked {} stream bytes ", n);
+
+
+    let Payload { subdomain, payload: _ } = parse_payload(&buf[0..n]);
+
+    return Some(StreamWithPeekedHost {
+        socket,
+        host: subdomain,
+        forwarded_for: String::default(),
+    });
 }
 /// Filter incoming remote streams
 #[tracing::instrument(skip(socket))]
