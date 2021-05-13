@@ -56,8 +56,8 @@ pub async fn process_local_tcp(mut stream: ReadHalf<TcpStream>, mut tunnel: Unbo
         let packet = ControlPacket::Data(stream_id.clone(), data.clone());
         tunnel.send(packet).await.expect("failed to tunnel packet from local tcp to tunnel");
 
-        let stream_id_clone =  stream_id.clone();
-        introspect::log_outgoing(stream_id_clone, data);
+        // let stream_id_clone =  stream_id.clone();
+        // introspect::log_outgoing(stream_id_clone, data);
     }
 }
 
@@ -77,7 +77,7 @@ async fn forward_to_local_tcp(stream_id: StreamId, mut sink: WriteHalf<TcpStream
         sink.write_all(&data).await.expect("failed to write packet data to local tcp socket");
         debug!("wrote to local service: {:?}", data.len());
 
-        let stream_id_clone =  stream_id.clone();
-        introspect::log_incoming(stream_id_clone, data);
+        // let stream_id_clone =  stream_id.clone();
+        // introspect::log_incoming(stream_id_clone, data);
     }
 }

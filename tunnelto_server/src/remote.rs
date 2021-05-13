@@ -222,79 +222,79 @@ async fn peek_tcp_request_host(mut socket: TcpStream) -> Option<StreamWithPeeked
     });
 }
 /// Filter incoming remote streams
-#[tracing::instrument(skip(socket))]
-async fn peek_http_request_host(mut socket: TcpStream) -> Option<StreamWithPeekedHost> {
-    /// Note we return out if the host header is not found
-    /// within the first 4kb of the request.
-    const MAX_HEADER_PEAK: usize = 4096;
-    let mut buf = vec![0; MAX_HEADER_PEAK]; //1kb
+// #[tracing::instrument(skip(socket))]
+// async fn peek_http_request_host(mut socket: TcpStream) -> Option<StreamWithPeekedHost> {
+//     /// Note we return out if the host header is not found
+//     /// within the first 4kb of the request.
+//     const MAX_HEADER_PEAK: usize = 4096;
+//     let mut buf = vec![0; MAX_HEADER_PEAK]; //1kb
 
-    tracing::debug!("checking stream headers");
+//     tracing::debug!("checking stream headers");
 
-    let n = match socket.peek(&mut buf).await {
-        Ok(n) => n,
-        Err(e) => {
-            error!("failed to read from tcp socket to determine host: {:?}", e);
-            return None;
-        }
-    };
+//     let n = match socket.peek(&mut buf).await {
+//         Ok(n) => n,
+//         Err(e) => {
+//             error!("failed to read from tcp socket to determine host: {:?}", e);
+//             return None;
+//         }
+//     };
 
-    // make sure we're not peeking the same header bytes
-    if n == 0 {
-        tracing::debug!("unable to peek header bytes");
-        return None;
-    }
+//     // make sure we're not peeking the same header bytes
+//     if n == 0 {
+//         tracing::debug!("unable to peek header bytes");
+//         return None;
+//     }
 
-    tracing::debug!("peeked {} stream bytes ", n);
+//     tracing::debug!("peeked {} stream bytes ", n);
 
-    let mut headers = [httparse::EMPTY_HEADER; 64]; // 30 seems like a generous # of headers
-    let mut req = httparse::Request::new(&mut headers);
+//     let mut headers = [httparse::EMPTY_HEADER; 64]; // 30 seems like a generous # of headers
+//     let mut req = httparse::Request::new(&mut headers);
 
-    if let Err(e) = req.parse(&buf[..n]) {
-        error!("failed to parse incoming http bytes: {:?}", e);
-        return None;
-    }
+//     if let Err(e) = req.parse(&buf[..n]) {
+//         error!("failed to parse incoming http bytes: {:?}", e);
+//         return None;
+//     }
 
-    // Handle the health check route
-    if req.path.map(|s| s.as_bytes()) == Some(HEALTH_CHECK_PATH) {
-        let _ = socket.write_all(HTTP_OK_RESPONSE).await.map_err(|e| {
-            error!("failed to write health_check: {:?}", e);
-        });
+//     // Handle the health check route
+//     if req.path.map(|s| s.as_bytes()) == Some(HEALTH_CHECK_PATH) {
+//         let _ = socket.write_all(HTTP_OK_RESPONSE).await.map_err(|e| {
+//             error!("failed to write health_check: {:?}", e);
+//         });
 
-        return None;
-    }
+//         return None;
+//     }
 
-    // get the ip addr in the header
-    let forwarded_for = if let Some(Ok(forwarded_for)) = req
-        .headers
-        .iter()
-        .filter(|h| h.name.to_lowercase() == "x-forwarded-for".to_string())
-        .map(|h| std::str::from_utf8(h.value))
-        .next()
-    {
-        forwarded_for.to_string()
-    } else {
-        String::default()
-    };
+//     // get the ip addr in the header
+//     let forwarded_for = if let Some(Ok(forwarded_for)) = req
+//         .headers
+//         .iter()
+//         .filter(|h| h.name.to_lowercase() == "x-forwarded-for".to_string())
+//         .map(|h| std::str::from_utf8(h.value))
+//         .next()
+//     {
+//         forwarded_for.to_string()
+//     } else {
+//         String::default()
+//     };
 
-    // look for a host header
-    if let Some(Ok(host)) = req
-        .headers
-        .iter()
-        .filter(|h| h.name.to_lowercase() == "host".to_string())
-        .map(|h| std::str::from_utf8(h.value))
-        .next()
-    {
-        return Some(StreamWithPeekedHost {
-            socket,
-            host: host.to_string(),
-            forwarded_for,
-        });
-    }
+//     // look for a host header
+//     if let Some(Ok(host)) = req
+//         .headers
+//         .iter()
+//         .filter(|h| h.name.to_lowercase() == "host".to_string())
+//         .map(|h| std::str::from_utf8(h.value))
+//         .next()
+//     {
+//         return Some(StreamWithPeekedHost {
+//             socket,
+//             host: host.to_string(),
+//             forwarded_for,
+//         });
+//     }
 
-    tracing::info!("found no host header, dropping connection.");
-    None
-}
+//     tracing::info!("found no host header, dropping connection.");
+//     None
+// }
 
 /// Process Messages from the control path in & out of the remote stream
 #[tracing::instrument(skip(tunnel_stream, tcp_stream))]
